@@ -5,6 +5,9 @@
 #include <QPixmap>
 #include <QSpinBox>
 
+#include <QString>
+#include <QStringList>
+
 #include "form_canvas.h"
 
 QT_BEGIN_NAMESPACE
@@ -26,6 +29,8 @@ private:
     QSpinBox ***m_pSpinMat;
     QPixmap m_pixmap;
 
+    QStringList m_imgList;
+
     int m_row, m_col;
     int m_gridSize;
     double m_scale;
@@ -38,6 +43,8 @@ private:
 
     void ConnectSpinMat();
     void DeleteSpinMat();
+
+    void ReadImageList();
 
 private slots:
     void InitCanvas();

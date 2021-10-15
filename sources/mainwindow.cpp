@@ -1,19 +1,22 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-#include <QString>
-#include <QStringList>
 #include <QColor>
 #include <QPoint>
 #include <QPainter>
 #include <QImage>
-#include <QFileDialog>
-#include <QFileInfo>
+
 #include <QDesktopServices>
+#include <QTableWidgetItem>
+
 #include <QUrl>
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QFileDialog>
+#include <QTextStream>
+
 #include <QDebug>
-#include <QTableWidgetItem>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -74,18 +77,22 @@ void MainWindow::InitCanvas()
 
 void MainWindow::DrawImage(int row, int col, int imgNo)
 {
-    QStringList imgPath = {
-        ":/input/blue_duck.png",
-        ":/input/blue_bf.png",
-        ":/input/red_bf.png"
-    };
-    if(imgNo < 0 || imgNo >= imgPath.length())
+    /*
+    QStringList imgList = {
+        "resources/input/duck_blue.png",
+        "resources/input/bf_blue.png",
+        "resources/input/bf_red.png"
+    };*/
+    ReadImageList();
+    if(imgNo < 0 || imgNo >= m_imgList.length())
         return;
 
     //qDebug() <<"draw " << row <<" "<< col <<" "<< imgNo;
 
     QImage image;
-    image.load(imgPath[imgNo]);
+    image.load(m_imgList[imgNo]);
+    if(image.isNull())      //图片不存在
+        return;
 
     int size = m_gridSize, imgSize = int(size*m_scale/100);
     QPixmap pixmap = QPixmap::fromImage(image.scaled(imgSize, imgSize, Qt::KeepAspectRatio));
@@ -139,8 +146,33 @@ void MainWindow::OpenImageDir()
     QDir dir(dirPath);
     if(!dir.exists())
         return;
+    //打开文件夹
     QDesktopServices::openUrl(QUrl(dirPath));
 
+    return;
+}
+
+void MainWindow::ReadImageList()
+{
+    QString filePath = "resources/input/image_list.txt";
+    QFile file(filePath);
+    if(!file.open(QFile::ReadOnly | QFile::Text)){
+        qDebug() << "failed to open " + filePath;
+        return;
+    }
+
+    QString imgDir = "resources/input/";
+    m_imgList.clear();
+    QString imgPath;
+    //读取文件中的图片路径
+    QTextStream txtin(&file);
+    while(!txtin.atEnd()){
+        imgPath = txtin.readLine();
+        if(imgPath != "")
+            m_imgList.push_back(imgDir+imgPath);
+        //qDebug() << imgDir + imgPath;
+    }
+    file.close();
     return;
 }
 

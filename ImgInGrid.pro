@@ -22,5 +22,4 @@ FORMS += \
     forms/form_canvas.ui \
     forms/mainwindow.ui
 
-RESOURCES += \
-    resources/input.qrc
+RESOURCES +=

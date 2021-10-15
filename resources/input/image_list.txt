@@ -1,0 +1,3 @@
+duck_blue.png
+bf_blue.png
+bf_red.png
