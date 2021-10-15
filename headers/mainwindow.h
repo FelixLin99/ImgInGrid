@@ -30,9 +30,10 @@ private:
     QPixmap m_pixmap;
 
     QStringList m_imgList;
+    QString m_inputDir, m_outputDir;
 
     int m_row, m_col;
-    int m_gridSize;
+    int m_gridSize, m_gap;
     double m_scale;
 
 private:
@@ -45,15 +46,22 @@ private:
     void DeleteSpinMat();
 
     void ReadImageList();
+    void FillImageList();
+
+    void SetOutputDir();
+    void SetCanvas();
 
 private slots:
     void InitCanvas();
-    void InitImage();
+    void DrawAllImage();
 
+    void DrawSign(int signNo);
+    void DrawSign();
     void DrawImage(int row, int col, int imgNo);
 
     void ChangeGridSize(int val);
-    void ChangeScale(int val);
+    void ChangeImageScale(int val);
+    void ChangeSignScale(int val);
 
     void SaveImage();
     void OpenImageDir();
