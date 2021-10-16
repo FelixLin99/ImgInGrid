@@ -16,6 +16,8 @@
 #include <QTextStream>
 
 #include <QDesktopServices>
+#include <QTimer>
+#include <QTime>
 #include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -38,6 +40,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::InitMembers()
 {
+    SetQuit(0);
     m_gridSize = 100;
     m_gap = 100;
     m_scale = 100;
@@ -48,6 +51,19 @@ void MainWindow::InitMembers()
     m_inputDir = "resources/input/";
     m_outputDir = "resources/output/";
     SetOutputDir();
+
+    m_signNameList = QStringList {
+        "",
+        "plus",
+        "up",
+        "down"
+    };
+    m_signList =  QStringList {
+        "",
+        "plus.png",
+        "up.png",
+        "down.png"
+    };
 
     pFormCanvas = new FormCanvas();
     pFormCanvas->setParent(ui->wgtCanvas);
@@ -73,7 +89,21 @@ void MainWindow::InitConnections()
     connect(ui->spinSignScale, SIGNAL(valueChanged(int)), this, SLOT(ChangeSignScale(int)));
     connect(ui->combSign, SIGNAL(currentIndexChanged(int)), this, SLOT(DrawSign(int)));
 
+    connect(ui->pbtn1Blue, SIGNAL(clicked()), this, SLOT(DrawBatch1Blue()));
+    connect(ui->pbtn1Blue1Red, SIGNAL(clicked()), this, SLOT(DrawBatch1Blue1Red()));
+    connect(ui->pbtnFin, SIGNAL(clicked()), this, SLOT(DrawBatchFin()));
+
     ConnectSpinMat();
+}
+
+void MainWindow::SetQuit(bool val)
+{
+    m_quit = val;
+}
+
+void MainWindow::closeEvent(QCloseEvent *)
+{
+    SetQuit(1);
 }
 
 void MainWindow::InitCanvas()
@@ -84,33 +114,29 @@ void MainWindow::InitCanvas()
     return;
 }
 
-void MainWindow::DrawSign(int signNo)
+void MainWindow::DrawSign(int signNo, QPixmap &canvas, bool clean)
 {
-    QStringList signList = {
-        "",
-        "plus.png",
-        "up.png",
-        "down.png"
-    };
-    QPixmap pixmap;
-    if(signNo < 0 || signNo >= signList.length())
+    if(signNo < 0 || signNo >= m_signList.length())
         return;
     //清空原位置
-    pixmap = QPixmap(m_gap, m_gap);
-    pixmap.fill(Qt::white);
+    QPainter painter(&canvas);
+    QPixmap pixmap;
+    int x, y;
+    if(clean){
+        pixmap = QPixmap(m_gap, m_gap);
+        pixmap.fill(Qt::white);
 
-    QPainter painter(&m_pixmap);
-    int x = ((m_col+2)*m_gridSize - m_gap)>>1;
-    int y = ((m_row+3)*m_gridSize - m_gap)>>1;
-    painter.drawPixmap(x, y, pixmap);
-    pFormCanvas->PaintPixmap(m_pixmap);
-
+        x = ((m_col+2)*m_gridSize - m_gap)>>1;
+        y = ((m_row+3)*m_gridSize - m_gap)>>1;
+        painter.drawPixmap(x, y, pixmap);
+        pFormCanvas->PaintPixmap(canvas);
+    }
     if(signNo == 0)     //无连接符号
         return;
 
     //有连接符号
     QImage image;
-    image.load(m_inputDir+signList[signNo]);
+    image.load(m_inputDir+m_signList[signNo]);
     if(image.isNull())      //图片不存在
         return;
 
@@ -121,6 +147,14 @@ void MainWindow::DrawSign(int signNo)
     x = ((m_col+2)*m_gridSize - size)>>1;
     y = ((m_row+3)*m_gridSize - size)>>1;
     painter.drawPixmap(x, y, pixmap);
+    return;
+}
+
+void MainWindow::DrawSign(int signNo)
+{
+    if(signNo < 0 || signNo >= m_signList.length())
+        return;
+    DrawSign(signNo, m_pixmap);
     pFormCanvas->PaintPixmap(m_pixmap);
 
     return;
@@ -132,7 +166,7 @@ void MainWindow::DrawSign()
     DrawSign(index);
 }
 
-void MainWindow::DrawImage(int row, int col, int imgNo)
+void MainWindow::DrawImage(int row, int col, int imgNo, QPixmap &canvas)
 {
     /*
     QStringList imgList = {
@@ -143,7 +177,6 @@ void MainWindow::DrawImage(int row, int col, int imgNo)
     ReadImageList();
     if(imgNo < 0 || imgNo >= m_imgList.length())
         return;
-
     //qDebug() <<"draw " << row <<" "<< col <<" "<< imgNo;
 
     QImage image;
@@ -154,10 +187,17 @@ void MainWindow::DrawImage(int row, int col, int imgNo)
     int size = m_gridSize, imgSize = int(size*m_scale/100);
     QPixmap pixmap = QPixmap::fromImage(image.scaled(imgSize, imgSize, Qt::KeepAspectRatio));
 
-    QPainter painter(&m_pixmap);
+    QPainter painter(&canvas);
     int offset = (size - imgSize)/2;
     int gap = (row >= m_row/2) ? size : 0;
     painter.drawPixmap((col+1)*size+offset, gap+(row+1)*size+offset, pixmap);
+
+    return;
+}
+
+void MainWindow::DrawImage(int row, int col, int imgNo)
+{
+    DrawImage(row, col, imgNo, m_pixmap);
     pFormCanvas->PaintPixmap(m_pixmap);
 
     return;
@@ -317,15 +357,50 @@ void MainWindow::SetOutputDir()
     return;
 }
 
+void MainWindow::GetCanvasSize(int &w, int &h)
+{
+    w = m_gridSize*(m_col+2);
+    h = m_gridSize*(m_row+2) + m_gap;
+    return;
+}
+
 void MainWindow::SetCanvas()
 {
-    int w = m_gridSize*(m_col+2);
-    int h = m_gridSize*(m_row+2) + m_gap;
+    int w, h;
+    GetCanvasSize(w, h);
+    m_pixmap = QPixmap(w, h);
 
     ui->wgtCanvas->setFixedSize(QSize(w, h));
     pFormCanvas->setFixedSize(QSize(w, h));
-    m_pixmap = QPixmap(w, h);
     return;
+}
+
+inline static int GetIndex(int total_col, int row, int col)
+{
+    return row*total_col + col;
+}
+
+void MainWindow::GetLastPos(int row, int col, int &last_row, int &last_col, int skip_row, int skip_col)
+{
+    if(row == 0 && col == 0){
+        last_row = -1;
+        last_col = -1;
+        return;
+    }
+
+    int last_index = GetIndex(m_col, row, col) - 1;
+    //跳过特定位置
+    if(last_index == GetIndex(m_col, skip_row, skip_col))
+        last_index--;
+
+    last_row = last_index/m_col;
+    last_col = last_index%m_col;
+    return;
+}
+
+void MainWindow::GetLastPos(int row, int col, int &last_row, int &last_col)
+{
+    GetLastPos(row, col, last_row, last_col, 0, -1);
 }
 
 void MainWindow::ChangeGridSize(int val)
@@ -358,4 +433,187 @@ void MainWindow::ChangeSignScale(int val)
     if(val <= 10)
         return;
     DrawSign();
+}
+
+//暂停防卡死
+static void TimerPause(QTime &time_1)
+{
+    //每运行一秒以上，暂停一段时间，防止窗口卡死
+    QTime time_2 = QTime::currentTime();
+    if(time_2.second() - time_1.second() != 0){
+        time_1 = time_2;
+        int msec = 100;     //100ms
+        QEventLoop loop;
+        QTimer::singleShot(msec, &loop, SLOT(quit()));
+        loop.exec();
+    }
+    return;
+}
+
+void MainWindow::DrawBatch1Blue()
+{
+    int w, h;
+    GetCanvasSize(w, h);
+    QPixmap canvas = QPixmap(w, h);
+    canvas.fill(Qt::white);
+
+    //创建输出目录
+    QString imgName, imgPath;
+    QString outputDir = "1Blue/";
+    QDir dir(m_outputDir);
+    dir.mkpath(outputDir);
+    outputDir = m_outputDir + outputDir;
+    qDebug() << outputDir;
+    //初始图片：蓝(0,0)
+    for(int i = 0; i < m_row; i++){
+        for(int j = 0; j < m_col; j++){
+            if(i == 0 && j == 0)
+                DrawImage(i, j, 1, canvas);
+            else
+                DrawImage(i, j, 0, canvas);
+        }
+    }
+    //连接符号
+    int index = ui->combSign->currentIndex();
+    DrawSign(index, canvas, 0);
+
+    //所有图片
+    QTime time_1 = QTime::currentTime();    //计时
+    for(int i = 0; i < m_row; i++){
+        for(int j = 0; j < m_col; j++){
+            //程序中止
+            if(m_quit)
+                return;
+
+            QString signSuffix = "";
+            if(index > 0)
+                signSuffix = "_" + m_signNameList[index];
+
+            //不是首张图片，先覆盖上一位置（蓝蝴蝶->蓝鸭子），再画新的位置（蓝蝴蝶）
+            if(i != 0 || j != 0){
+                int last_i, last_j;
+                GetLastPos(i, j, last_i, last_j);
+                DrawImage(last_i, last_j, 0, canvas);
+                DrawImage(i, j, 1, canvas);
+            }
+            //保存图片
+            imgName = "b_" + QString::number(i) + "_" + QString::number(j)
+                    + signSuffix + ".png";
+            imgPath = outputDir + imgName;
+            qDebug() << imgPath;
+            canvas.save(imgPath);
+
+            //每隔一段时间，暂停防卡死
+            TimerPause(time_1);
+        }
+    }
+    return;
+}
+
+void MainWindow::DrawBatch1Blue1Red()
+{
+    int w, h;
+    GetCanvasSize(w, h);
+    QPixmap canvas = QPixmap(w, h);
+    canvas.fill(Qt::white);
+
+    //创建输出目录
+    QString imgName, imgPath;
+    QString outputDir = "1Blue1Red/";
+    QDir dir(m_outputDir);
+    dir.mkpath(outputDir);
+    outputDir = m_outputDir + outputDir;
+    qDebug() << outputDir;
+    //初始图片：蓝(0,0)
+    for(int i = 0; i < m_row; i++){
+        for(int j = 0; j < m_col; j++){
+            if(i == 0 && j == 0)
+                DrawImage(i, j, 1, canvas);
+            else
+                DrawImage(i, j, 0, canvas);
+        }
+    }
+    //连接符号
+    int index = ui->combSign->currentIndex();
+    DrawSign(index, canvas, 0);
+    QString signSuffix = "";
+    if(index > 0)
+        signSuffix = "_" + m_signNameList[index];
+
+    //所有图片
+    QTime time_1 = QTime::currentTime();    //计时
+    for(int i = 0; i < m_row; i++){
+        for(int j = 0; j < m_col; j++){
+            //固定蓝蝴蝶位置
+            //不是首张图片，先覆盖上一位置，再画新的位置
+            if(i != 0 || j != 0){
+                int last_i, last_j;
+                GetLastPos(i, j, last_i, last_j);
+                DrawImage(last_i, last_j, 0, canvas);
+                DrawImage(i, j, 1, canvas);
+            }
+            //改变红蝴蝶位置
+            for(int i1 = 0; i1 < m_row; i1++){
+                for(int j1 = 0; j1 < m_col; j1++){
+                    //程序中止
+                    if(m_quit)
+                        return;
+                    //忽略蓝蝴蝶位置
+                    if(i1 == i && j1 == j)
+                        continue;
+
+                    //蓝(0,0)
+                    if(i == 0 && j == 0) {
+                        //初始：红(0,1)
+                        if(i1 == 0 && j1 == 1){
+                            DrawImage(i1, j1, 2, canvas);
+                        }
+                        //清空原位置，画新位置
+                        else {
+                            int last_i1, last_j1;
+                            GetLastPos(i1, j1, last_i1, last_j1);
+                            DrawImage(last_i1, last_j1, 0, canvas);
+                            DrawImage(i1, j1, 2, canvas);
+                        }
+                    }
+                    //蓝不是(0,0)
+                    else {
+                        //初始：红(0,0)
+                        if(i1 == 0 && j1 == 0){
+                            DrawImage(i1, j1, 2, canvas);
+                        }
+                        //清空原位置，画新位置
+                        else {
+                            int last_i1, last_j1;
+                            //计算下标，跳过蓝蝴蝶位置
+                            GetLastPos(i1, j1, last_i1, last_j1, i, j);
+                            DrawImage(last_i1, last_j1, 0, canvas);
+                            DrawImage(i1, j1, 2, canvas);
+                        }
+                    }
+                    //保存图片
+                    imgName = "b_" + QString::number(i) + "_" + QString::number(j) + "_"
+                            + "r_" + QString::number(i1) + "_" + QString::number(j1)
+                            + signSuffix + ".png";
+                    imgPath = outputDir + imgName;
+                    qDebug() << imgPath;
+                    canvas.save(imgPath);
+
+                    //每隔一段时间，暂停防卡死
+                    TimerPause(time_1);
+                }
+            }
+        }
+    }
+    return;
+}
+
+void MainWindow::DrawBatchFin()
+{
+    int w, h;
+    GetCanvasSize(w, h);
+    QPixmap canvas = QPixmap(w, h);
+    canvas.fill(Qt::white);
+
+    return;
 }
