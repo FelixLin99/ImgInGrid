@@ -16,9 +16,37 @@
 #include <QTextStream>
 
 #include <QDesktopServices>
+#include <QMessageBox>
 #include <QTimer>
 #include <QTime>
 #include <QDebug>
+
+//用图像位置计算标号
+inline static int GetIndex(int total_col, int row, int col)
+{
+    return row*total_col + col;
+}
+
+//汉字编码转换
+static QString CStr2LocalQStr(const char *str)
+{
+    return QString::fromUtf8(str);
+}
+
+//暂停防卡死
+static void TimerPause(QTime &time_1)
+{
+    //每运行一秒以上，暂停一段时间，防止窗口卡死
+    QTime time_2 = QTime::currentTime();
+    if(time_2.second() - time_1.second() != 0){
+        time_1 = time_2;
+        int msec = 100;     //100ms
+        QEventLoop loop;
+        QTimer::singleShot(msec, &loop, SLOT(quit()));
+        loop.exec();
+    }
+    return;
+}
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -38,9 +66,19 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+void MainWindow::closeEvent(QCloseEvent *)
+{
+    SetQuit(1);
+}
+
 void MainWindow::InitMembers()
 {
+    this->setWindowTitle(CStr2LocalQStr("网格图片合成"));
+    SetBatchStatus(0);
+
     SetQuit(0);
+    m_break = 0;
+
     m_gridSize = 100;
     m_gap = 100;
     m_scale = 100;
@@ -93,6 +131,7 @@ void MainWindow::InitConnections()
     connect(ui->pbtn1Blue1Red, SIGNAL(clicked()), this, SLOT(DrawBatch1Blue1Red()));
     connect(ui->pbtnFin, SIGNAL(clicked()), this, SLOT(DrawBatchFin()));
 
+    connect(ui->pbtnBreak, &QPushButton::clicked, [=](){ m_break = 1; });
     ConnectSpinMat();
 }
 
@@ -101,9 +140,17 @@ void MainWindow::SetQuit(bool val)
     m_quit = val;
 }
 
-void MainWindow::closeEvent(QCloseEvent *)
+void MainWindow::SetBatchStatus(bool val)
 {
-    SetQuit(1);
+    if(val){    //忙碌
+        ui->lnBatStatus->setText(CStr2LocalQStr("忙碌..."));
+        ui->lnBatStatus->setStyleSheet("color:red;font-weight:bold");
+    }
+    else {      //空闲
+        ui->lnBatStatus->setText(CStr2LocalQStr("空闲"));
+        ui->lnBatStatus->setStyleSheet("color:green;font-weight:bold");
+    }
+    return;
 }
 
 void MainWindow::InitCanvas()
@@ -177,6 +224,8 @@ void MainWindow::DrawImage(int row, int col, int imgNo, QPixmap &canvas)
     ReadImageList();
     if(imgNo < 0 || imgNo >= m_imgList.length())
         return;
+    if(row < 0 || row >= m_row || col < 0 || col >= m_col)
+        return;
     //qDebug() <<"draw " << row <<" "<< col <<" "<< imgNo;
 
     QImage image;
@@ -203,12 +252,43 @@ void MainWindow::DrawImage(int row, int col, int imgNo)
     return;
 }
 
+int MainWindow::DrawImageFromStr(const QString &formatStr, QPixmap &canvas)
+{
+    //字符串格式：n_row_col，(row,col)的图片下标为n
+    QStringList strList = formatStr.split("_");
+    int len = strList.length();
+    if(len % 3 != 0) {   //格式错误
+        qDebug() <<"Format error";
+        return -1;
+    }
+    //恢复初始画布：全为鸭子
+    int vec_n = m_imgIndexList.length();
+    for(int i = 0; i < vec_n; i++){
+        int index = m_imgIndexList[i];
+        DrawImage(index/m_col, index%m_col, 0, canvas);
+    }
+    m_imgIndexList.clear();
+    m_imgIndexList.reserve(len/3);
+
+    //list中，三项为一组，n_row_col
+    for(int i = 0; i < len; i+=3){
+        int imgNo = strList[i].toInt();
+        int row = strList[i+1].toInt();
+        int col = strList[i+2].toInt();
+        DrawImage(row, col, imgNo, canvas);
+        //记录图像位置
+        int index = GetIndex(m_col, row, col);
+        m_imgIndexList.push_back(index);
+    }
+    return 0;
+}
+
 void MainWindow::SaveImage()
 {
     QString imgName = "output_image";
     QString imgType = "png";
     QString imgPath = QFileDialog::getSaveFileName(
-                this, "保存图片",
+                this, CStr2LocalQStr("保存图片"),
                 m_outputDir + imgName,
                 "PNG 图片 (*.png)"
                 );
@@ -369,15 +449,11 @@ void MainWindow::SetCanvas()
     int w, h;
     GetCanvasSize(w, h);
     m_pixmap = QPixmap(w, h);
+    m_pixmap.fill(Qt::white);
 
     ui->wgtCanvas->setFixedSize(QSize(w, h));
     pFormCanvas->setFixedSize(QSize(w, h));
     return;
-}
-
-inline static int GetIndex(int total_col, int row, int col)
-{
-    return row*total_col + col;
 }
 
 void MainWindow::GetLastPos(int row, int col, int &last_row, int &last_col, int skip_row, int skip_col)
@@ -435,62 +511,70 @@ void MainWindow::ChangeSignScale(int val)
     DrawSign();
 }
 
-//暂停防卡死
-static void TimerPause(QTime &time_1)
-{
-    //每运行一秒以上，暂停一段时间，防止窗口卡死
-    QTime time_2 = QTime::currentTime();
-    if(time_2.second() - time_1.second() != 0){
-        time_1 = time_2;
-        int msec = 100;     //100ms
-        QEventLoop loop;
-        QTimer::singleShot(msec, &loop, SLOT(quit()));
-        loop.exec();
-    }
-    return;
-}
-
 void MainWindow::DrawBatch1Blue()
 {
+    //创建输出目录
+    QString outputDir = QFileDialog::getExistingDirectory(
+                this, CStr2LocalQStr("选择输出目录"), m_outputDir);
+    if(outputDir.isEmpty()) {
+        qDebug() << "break";
+        return;
+    }
+    QString childDir = "1Blue/";
+    QDir dir(outputDir);
+    dir.mkpath(childDir);
+    outputDir = outputDir + "/" + childDir;
+    qDebug() << outputDir;
+
+    //状态：忙碌
+    SetBatchStatus(1);
+
+    //初始化画布
     int w, h;
     GetCanvasSize(w, h);
     QPixmap canvas = QPixmap(w, h);
     canvas.fill(Qt::white);
 
-    //创建输出目录
-    QString imgName, imgPath;
-    QString outputDir = "1Blue/";
-    QDir dir(m_outputDir);
-    dir.mkpath(outputDir);
-    outputDir = m_outputDir + outputDir;
-    qDebug() << outputDir;
-    //初始图片：蓝(0,0)
+    //连接符号
+    int index = ui->combSign->currentIndex();
+    DrawSign(index, canvas, 0);
+
+    //根据符号选择蓝蝴蝶所在区域
+    int start_i = 0, end_i = m_row;
+    if(index == SIGN_IDX_UP)        //上箭头
+        end_i = (m_row+1)/2;
+    else if(index == SIGN_IDX_DOWN) //下箭头
+        start_i = (m_row+1)/2;
+
+    //初始图片：蓝蝴蝶(start_i,0)
     for(int i = 0; i < m_row; i++){
         for(int j = 0; j < m_col; j++){
-            if(i == 0 && j == 0)
+            if(i == start_i && j == 0)
                 DrawImage(i, j, 1, canvas);
             else
                 DrawImage(i, j, 0, canvas);
         }
     }
-    //连接符号
-    int index = ui->combSign->currentIndex();
-    DrawSign(index, canvas, 0);
 
-    //所有图片
+    //生成所有图片
+    QString imgName, imgPath;
     QTime time_1 = QTime::currentTime();    //计时
-    for(int i = 0; i < m_row; i++){
+    for(int i = start_i; i < end_i; i++){
         for(int j = 0; j < m_col; j++){
-            //程序中止
-            if(m_quit)
+            //中止
+            if(m_quit)          //窗口关闭
                 return;
-
+            else if(m_break){   //按下中止按钮
+                m_break = 0;
+                SetBatchStatus(0);  //空闲
+                return;
+            }
             QString signSuffix = "";
             if(index > 0)
                 signSuffix = "_" + m_signNameList[index];
 
             //不是首张图片，先覆盖上一位置（蓝蝴蝶->蓝鸭子），再画新的位置（蓝蝴蝶）
-            if(i != 0 || j != 0){
+            if(i != start_i || j != 0){
                 int last_i, last_j;
                 GetLastPos(i, j, last_i, last_j);
                 DrawImage(last_i, last_j, 0, canvas);
@@ -507,32 +591,35 @@ void MainWindow::DrawBatch1Blue()
             TimerPause(time_1);
         }
     }
+    //状态：空闲
+    SetBatchStatus(0);
     return;
 }
 
 void MainWindow::DrawBatch1Blue1Red()
 {
+    //创建输出目录
+    QString outputDir = QFileDialog::getExistingDirectory(
+                this, CStr2LocalQStr("选择输出目录"), m_outputDir);
+    if(outputDir.isEmpty()) {
+        qDebug() << "break";
+        return;
+    }
+    QString childDir = "1Blue1Red/";
+    QDir dir(outputDir);
+    dir.mkpath(childDir);
+    outputDir = outputDir + "/" + childDir;
+    qDebug() << outputDir;
+
+    //状态：忙碌
+    SetBatchStatus(1);
+
+    //初始化画布
     int w, h;
     GetCanvasSize(w, h);
     QPixmap canvas = QPixmap(w, h);
     canvas.fill(Qt::white);
 
-    //创建输出目录
-    QString imgName, imgPath;
-    QString outputDir = "1Blue1Red/";
-    QDir dir(m_outputDir);
-    dir.mkpath(outputDir);
-    outputDir = m_outputDir + outputDir;
-    qDebug() << outputDir;
-    //初始图片：蓝(0,0)
-    for(int i = 0; i < m_row; i++){
-        for(int j = 0; j < m_col; j++){
-            if(i == 0 && j == 0)
-                DrawImage(i, j, 1, canvas);
-            else
-                DrawImage(i, j, 0, canvas);
-        }
-    }
     //连接符号
     int index = ui->combSign->currentIndex();
     DrawSign(index, canvas, 0);
@@ -540,13 +627,31 @@ void MainWindow::DrawBatch1Blue1Red()
     if(index > 0)
         signSuffix = "_" + m_signNameList[index];
 
-    //所有图片
-    QTime time_1 = QTime::currentTime();    //计时
+    //根据符号选择蓝蝴蝶所在区域
+    int start_i = 0, end_i = m_row;
+    if(index == SIGN_IDX_UP)        //上箭头
+        end_i = (m_row+1)/2;
+    else if(index == SIGN_IDX_DOWN) //下箭头
+        start_i = (m_row+1)/2;
+
+    //初始图片：蓝蝴蝶(start_i,0)
     for(int i = 0; i < m_row; i++){
+        for(int j = 0; j < m_col; j++){
+            if(i == start_i && j == 0)
+                DrawImage(i, j, 1, canvas);
+            else
+                DrawImage(i, j, 0, canvas);
+        }
+    }
+
+    //生成所有图片
+    QString imgName, imgPath;
+    QTime time_1 = QTime::currentTime();    //计时
+    for(int i = start_i; i < end_i; i++){
         for(int j = 0; j < m_col; j++){
             //固定蓝蝴蝶位置
             //不是首张图片，先覆盖上一位置，再画新的位置
-            if(i != 0 || j != 0){
+            if(i != start_i || j != 0){
                 int last_i, last_j;
                 GetLastPos(i, j, last_i, last_j);
                 DrawImage(last_i, last_j, 0, canvas);
@@ -555,16 +660,21 @@ void MainWindow::DrawBatch1Blue1Red()
             //改变红蝴蝶位置
             for(int i1 = 0; i1 < m_row; i1++){
                 for(int j1 = 0; j1 < m_col; j1++){
-                    //程序中止
-                    if(m_quit)
+                    //中止
+                    if(m_quit)          //窗口关闭
                         return;
+                    else if(m_break){   //按下中止按钮
+                        m_break = 0;
+                        SetBatchStatus(0);  //空闲
+                        return;
+                    }
                     //忽略蓝蝴蝶位置
                     if(i1 == i && j1 == j)
                         continue;
 
-                    //蓝(0,0)
+                    //蓝蝴蝶(0,0)
                     if(i == 0 && j == 0) {
-                        //初始：红(0,1)
+                        //初始：红蝴蝶(0,1)
                         if(i1 == 0 && j1 == 1){
                             DrawImage(i1, j1, 2, canvas);
                         }
@@ -576,9 +686,9 @@ void MainWindow::DrawBatch1Blue1Red()
                             DrawImage(i1, j1, 2, canvas);
                         }
                     }
-                    //蓝不是(0,0)
+                    //蓝蝴蝶不是(0,0)
                     else {
-                        //初始：红(0,0)
+                        //初始：红蝴蝶(0,0)
                         if(i1 == 0 && j1 == 0){
                             DrawImage(i1, j1, 2, canvas);
                         }
@@ -605,15 +715,103 @@ void MainWindow::DrawBatch1Blue1Red()
             }
         }
     }
+    //状态：空闲
+    SetBatchStatus(0);
     return;
 }
 
 void MainWindow::DrawBatchFin()
 {
+    QString fileName = "batch_input.txt";
+    QString filePath = QFileDialog::getOpenFileName(
+                this, CStr2LocalQStr("选择输入文件"),
+                m_inputDir + fileName,
+                "TXT 文本文件 (*.txt)"
+                );
+
+    //关闭对话框，则路径为空，退出
+    if(filePath.isEmpty()){
+        return;
+    }
+    //打开文件
+    QFile fin(filePath);
+    if(!fin.open(QFile::ReadOnly)){
+        qDebug() <<"Failed to open input file";
+        return;
+    }
+    //创建输出目录
+    QMessageBox::information(nullptr, CStr2LocalQStr("提示"), CStr2LocalQStr("下一步：选择输出目录"));
+    QString outputDir = QFileDialog::getExistingDirectory(
+                this, CStr2LocalQStr("选择输出目录"), m_outputDir);
+    if(outputDir.isEmpty()) {
+        qDebug() << "break";
+        return;
+    }
+    QString childDir = "Batch/";
+    QDir dir(outputDir);
+    dir.mkpath(childDir);
+    outputDir = outputDir + "/" + childDir;
+    qDebug() << outputDir;
+
+    //状态：忙碌
+    SetBatchStatus(1);
+
+    //初始化画布
     int w, h;
     GetCanvasSize(w, h);
     QPixmap canvas = QPixmap(w, h);
     canvas.fill(Qt::white);
 
+    //初始图片：全部为蓝鸭子
+    for(int i = 0; i < m_row; i++){
+        for(int j = 0; j < m_col; j++){
+            DrawImage(i, j, 0, canvas);
+        }
+    }
+    //连接符号
+    int index = ui->combSign->currentIndex();
+    DrawSign(index, canvas, 0);
+    QString signSuffix = "";
+    if(index > 0)
+        signSuffix = "_" + m_signNameList[index];
+
+    //清空数组
+    //数组用于记录每张图片画蝴蝶的位置，以便于在当前画布的基础上生成下一张图片
+    m_imgIndexList.clear();
+
+    //读取文件：n_row_col指(x,y)位置的图片下标为n，默认各位置的图片下标为0
+    QTextStream txtin(&fin);
+    QTime time_1 = QTime::currentTime();
+    while(!txtin.atEnd()){
+        //中止
+        if(m_quit)          //窗口关闭
+            return;
+        else if(m_break){   //按下中止按钮
+            m_break = 0;
+            SetBatchStatus(0);  //空闲
+            return;
+        }
+        //读取文件
+        QString imgFormat;
+        txtin >> imgFormat;
+        if(imgFormat.isEmpty())
+            continue;
+        qDebug() << imgFormat;
+        //画图
+        if(DrawImageFromStr(imgFormat, canvas)){
+            //imgFormat格式错误
+            continue;
+        }
+        //保存图片
+        QString imgPath = outputDir + "/" + imgFormat + signSuffix + ".png";
+        canvas.save(imgPath);
+
+        //每隔一段时间，暂停防卡死
+        TimerPause(time_1);
+    }
+    fin.close();
+
+    //状态：空闲
+    SetBatchStatus(0);
     return;
 }
