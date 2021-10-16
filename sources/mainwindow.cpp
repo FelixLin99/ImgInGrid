@@ -381,6 +381,20 @@ void MainWindow::GenInputMat()
     ui->tabInput->setRowCount(m_row);
     ui->tabInput->setColumnCount(m_col);
 
+    //行表头
+    QStringList VHeaders;
+    VHeaders.reserve(m_row);
+    for(int i = 0; i < m_row; i++)
+        VHeaders.push_back(QString::number(i));
+    ui->tabInput->setVerticalHeaderLabels(VHeaders);
+    //列表头
+    QStringList HHeaders;
+    HHeaders.reserve(m_col);
+    for(int i = 0; i < m_col; i++)
+        HHeaders.push_back(QString::number(i));
+    ui->tabInput->setHorizontalHeaderLabels(HHeaders);
+
+    //填充表格
     m_pSpinMat = new QSpinBox**[m_row];
     for(int i = 0; i < m_row; i++){
         m_pSpinMat[i] = new QSpinBox*[m_col];
