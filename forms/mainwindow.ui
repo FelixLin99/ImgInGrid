@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>842</width>
+    <width>848</width>
     <height>826</height>
    </rect>
   </property>
@@ -148,7 +148,7 @@
        <item row="0" column="0">
         <widget class="QLabel" name="label_2">
          <property name="text">
-          <string>单个方格大小[40.800]：</string>
+          <string>单个方格大小[40,800]：</string>
          </property>
         </widget>
        </item>
@@ -171,7 +171,7 @@
        <item row="1" column="0">
         <widget class="QLabel" name="label">
          <property name="text">
-          <string>图像与方格的长度比[40.100]：</string>
+          <string>图像与方格的长度比[40,100]：</string>
          </property>
         </widget>
        </item>
@@ -225,7 +225,7 @@
        <item row="3" column="0">
         <widget class="QLabel" name="label_4">
          <property name="text">
-          <string>符号与方格的长度比[40.100]：</string>
+          <string>符号与方格的长度比[40,100]：</string>
          </property>
         </widget>
        </item>
@@ -388,7 +388,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>842</width>
+     <width>848</width>
      <height>25</height>
     </rect>
    </property>

@@ -14,6 +14,7 @@
 #include <QFileInfo>
 #include <QFileDialog>
 #include <QTextStream>
+#include <QByteArray>
 
 #include <QDesktopServices>
 #include <QMessageBox>
@@ -312,7 +313,7 @@ void MainWindow::SaveImage()
     QFileInfo info(imgPath);
     QString imgDir = info.path();
     ui->ptxtPath->setPlainText(imgDir);
-    m_outputDir = imgDir;
+    m_outputDir = imgDir + "/";
 
     return;
 }
@@ -320,13 +321,14 @@ void MainWindow::SaveImage()
 //打开图片文件夹
 void MainWindow::OpenImageDir()
 {
-    QString dirPath = ui->ptxtPath->toPlainText();
+    //QString dirPath = ui->ptxtPath->toPlainText();
+    QString dirPath = m_outputDir;
     qDebug() << dirPath;
     QDir dir(dirPath);
     if(!dir.exists())
         return;
-    //打开文件夹
-    QDesktopServices::openUrl(QUrl(dirPath));
+    //打开文件夹（注意防止中文路径乱码）
+    QDesktopServices::openUrl(QUrl::fromLocalFile(dirPath));
 
     return;
 }
@@ -447,7 +449,8 @@ void MainWindow::SetOutputDir()
     QDir dir(m_outputDir);
     if(!dir.exists())
         return;
-    ui->ptxtPath->setPlainText(dir.absolutePath());
+    m_outputDir = dir.absolutePath() + "/";
+    ui->ptxtPath->setPlainText(m_outputDir);
     return;
 }
 
