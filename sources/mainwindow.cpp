@@ -81,8 +81,11 @@ void MainWindow::InitMembers()
     m_break = 0;
 
     m_gridSize = 100;
-    m_gap = 100;
+    m_gapUD = 100;
+    m_gapLR = 0;
     m_scale = 100;
+
+    m_quality = 80;
 
     m_row = 6;
     m_col = 4;
@@ -128,6 +131,9 @@ void MainWindow::InitConnections()
     connect(ui->spinSignScale, SIGNAL(valueChanged(int)), this, SLOT(ChangeSignScale(int)));
     connect(ui->combSign, SIGNAL(currentIndexChanged(int)), this, SLOT(DrawSign(int)));
 
+    connect(ui->spinGapLR, SIGNAL(valueChanged(int)), this, SLOT(ChangeGapLR(int)));
+    connect(ui->spinQuality, SIGNAL(valueChanged(int)), this, SLOT(ChangeQuality(int)));
+
     connect(ui->pbtn1Blue, SIGNAL(clicked()), this, SLOT(DrawBatch1Blue()));
     connect(ui->pbtn1Blue1Red, SIGNAL(clicked()), this, SLOT(DrawBatch1Blue1Red()));
     connect(ui->pbtnFin, SIGNAL(clicked()), this, SLOT(DrawBatchFin()));
@@ -171,11 +177,11 @@ void MainWindow::DrawSign(int signNo, QPixmap &canvas, bool clean)
     QPixmap pixmap;
     int x, y;
     if(clean){
-        pixmap = QPixmap(m_gap, m_gap);
+        pixmap = QPixmap(m_gapUD, m_gapUD);
         pixmap.fill(Qt::white);
 
-        x = ((m_col+2)*m_gridSize - m_gap)>>1;
-        y = ((m_row+3)*m_gridSize - m_gap)>>1;
+        x = ((m_col+2)*m_gridSize + m_gapLR - m_gapUD)>>1;
+        y = ((m_row+3)*m_gridSize - m_gapUD)>>1;
         painter.drawPixmap(x, y, pixmap);
         pFormCanvas->PaintPixmap(canvas);
     }
@@ -189,10 +195,10 @@ void MainWindow::DrawSign(int signNo, QPixmap &canvas, bool clean)
         return;
 
     int scale = ui->spinSignScale->value();
-    int size = int(m_gap*scale/100);
+    int size = int(m_gapUD*scale/100);
     pixmap = QPixmap::fromImage(image.scaled(size, size, Qt::KeepAspectRatio));
 
-    x = ((m_col+2)*m_gridSize - size)>>1;
+    x = ((m_col+2)*m_gridSize + m_gapLR - size)>>1;
     y = ((m_row+3)*m_gridSize - size)>>1;
     painter.drawPixmap(x, y, pixmap);
     return;
@@ -235,12 +241,20 @@ void MainWindow::DrawImage(int row, int col, int imgNo, QPixmap &canvas)
         return;
 
     int size = m_gridSize, imgSize = int(size*m_scale/100);
-    QPixmap pixmap = QPixmap::fromImage(image.scaled(imgSize, imgSize, Qt::KeepAspectRatio));
+    //QPixmap pixmap = QPixmap::fromImage(image.scaled(imgSize, imgSize, Qt::KeepAspectRatio));
+    QPixmap pixmap(m_imgList[imgNo]);
+    pixmap = pixmap.scaled(4*pixmap.size()).scaled(imgSize, imgSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
     QPainter painter(&canvas);
+    //painter质量
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
     int offset = (size - imgSize)/2;
-    int gap = (row >= m_row/2) ? size : 0;
-    painter.drawPixmap((col+1)*size+offset, gap+(row+1)*size+offset, pixmap);
+    int gapUD = (row >= m_row/2) ? m_gapUD : 0;
+    int gapLR = (col >= m_col/2) ? m_gapLR : 0;
+    int x = gapLR+(col+1)*size+offset;
+    int y = gapUD+(row+1)*size+offset;
+    //painter.drawPixmap(x, y, pixmap);
+    painter.drawPixmap(QRect(x, y, imgSize, imgSize), pixmap);
 
     return;
 }
@@ -307,8 +321,9 @@ void MainWindow::SaveImage()
         qDebug() << imgPath;
         imgPath += "." + imgType;
     }
-    //保存图片：质量因数 80（1-100，数值越大，质量越高）
-    m_pixmap.save(imgPath, Q_NULLPTR, 80);
+    //保存图片：质量因数 80（1-100，对于PNG，数值越小，压缩率越高）
+    m_pixmap.save(imgPath, Q_NULLPTR, m_quality);
+    //qDebug() <<"quality: " << m_quality;
 
     QFileInfo info(imgPath);
     QString imgDir = info.path();
@@ -456,8 +471,8 @@ void MainWindow::SetOutputDir()
 
 void MainWindow::GetCanvasSize(int &w, int &h)
 {
-    w = m_gridSize*(m_col+2);
-    h = m_gridSize*(m_row+2) + m_gap;
+    w = m_gridSize*(m_col+2) + m_gapLR;
+    h = m_gridSize*(m_row+2) + m_gapUD;
     return;
 }
 
@@ -499,7 +514,7 @@ void MainWindow::GetLastPos(int row, int col, int &last_row, int &last_col)
 void MainWindow::ChangeGridSize(int val)
 {
     m_gridSize = val;
-    m_gap = m_gridSize;
+    m_gapUD = m_gridSize;
 
     SetCanvas();
 
@@ -526,6 +541,24 @@ void MainWindow::ChangeSignScale(int val)
     if(val <= 10)
         return;
     DrawSign();
+}
+
+void MainWindow::ChangeGapLR(int val)
+{
+    m_gapLR = int(m_gridSize*val/100);
+
+    SetCanvas();
+
+    m_pixmap.fill(Qt::white);   //清空画布
+    DrawAllImage();     //重画图像
+    DrawSign();         //重画连接符号
+    return;
+}
+
+void MainWindow::ChangeQuality(int val)
+{
+    m_quality = val;
+    return;
 }
 
 void MainWindow::DrawBatch1Blue()
@@ -602,7 +635,7 @@ void MainWindow::DrawBatch1Blue()
                     + signSuffix + ".png";
             imgPath = outputDir + imgName;
             qDebug() << imgPath;
-            canvas.save(imgPath);
+            canvas.save(imgPath, Q_NULLPTR, m_quality);
 
             //每隔一段时间，暂停防卡死
             TimerPause(time_1);
@@ -724,7 +757,7 @@ void MainWindow::DrawBatch1Blue1Red()
                             + signSuffix + ".png";
                     imgPath = outputDir + imgName;
                     qDebug() << imgPath;
-                    canvas.save(imgPath);
+                    canvas.save(imgPath, Q_NULLPTR, m_quality);
 
                     //每隔一段时间，暂停防卡死
                     TimerPause(time_1);
@@ -821,7 +854,7 @@ void MainWindow::DrawBatchFin()
         }
         //保存图片
         QString imgPath = outputDir + "/" + imgFormat + signSuffix + ".png";
-        canvas.save(imgPath);
+        canvas.save(imgPath, Q_NULLPTR, m_quality);
 
         //每隔一段时间，暂停防卡死
         TimerPause(time_1);

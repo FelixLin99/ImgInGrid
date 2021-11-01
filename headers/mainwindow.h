@@ -43,7 +43,8 @@ private:
     QVector<int> m_imgIndexList;
 
     int m_row, m_col;
-    int m_gridSize, m_gap;
+    int m_gridSize, m_gapUD, m_gapLR;
+    int m_quality;
     double m_scale;
 
     bool m_quit, m_break;
@@ -90,6 +91,8 @@ private slots:
     void ChangeGridSize(int val);
     void ChangeImageScale(int val);
     void ChangeSignScale(int val);
+    void ChangeGapLR(int val);
+    void ChangeQuality(int val);
 
     void SaveImage();
     void OpenImageDir();
