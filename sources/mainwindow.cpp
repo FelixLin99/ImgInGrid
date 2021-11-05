@@ -490,13 +490,10 @@ void MainWindow::SetCanvas()
 
 void MainWindow::GetLastPos(int row, int col, int &last_row, int &last_col, int skip_row, int skip_col)
 {
-    if(row == 0 && col == 0){
-        last_row = -1;
-        last_col = -1;
-        return;
-    }
+    int last_index = GetIndex(m_col, row, col) - 1;    
+    if(last_index < 0)
+        last_index += m_row*m_col;
 
-    int last_index = GetIndex(m_col, row, col) - 1;
     //跳过特定位置
     if(last_index == GetIndex(m_col, skip_row, skip_col))
         last_index--;
@@ -738,18 +735,11 @@ void MainWindow::DrawBatch1Blue1Red()
                     }
                     //蓝蝴蝶不是(0,0)
                     else {
-                        //初始：红蝴蝶(0,0)
-                        if(i1 == 0 && j1 == 0){
-                            DrawImage(i1, j1, 2, canvas);
-                        }
-                        //清空原位置，画新位置
-                        else {
-                            int last_i1, last_j1;
-                            //计算下标，跳过蓝蝴蝶位置
-                            GetLastPos(i1, j1, last_i1, last_j1, i, j);
-                            DrawImage(last_i1, last_j1, 0, canvas);
-                            DrawImage(i1, j1, 2, canvas);
-                        }
+                        int last_i1, last_j1;
+                        //计算下标，跳过蓝蝴蝶位置
+                        GetLastPos(i1, j1, last_i1, last_j1, i, j);
+                        DrawImage(last_i1, last_j1, 0, canvas);
+                        DrawImage(i1, j1, 2, canvas);
                     }
                     //保存图片
                     imgName = "b_" + QString::number(i) + "_" + QString::number(j) + "_"
