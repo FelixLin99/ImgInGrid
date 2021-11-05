@@ -111,7 +111,9 @@ void MainWindow::InitMembers()
     pFormCanvas->setParent(ui->wgtCanvas);
     SetCanvas();
 
-    ReadImageList();
+//  ReadImageList();
+    LoadSignPixmap();
+    LoadImagePixmap();
     GenInputMat();      //数值框要设置最大值，需先读取图像数量
 
     //图像列表不可编辑
@@ -170,14 +172,13 @@ void MainWindow::InitCanvas()
 
 void MainWindow::DrawSign(int signNo, QPixmap &canvas, bool clean)
 {
-    if(signNo < 0 || signNo >= m_signList.length())
+    if(signNo < 0 || signNo >= m_signPixmap.length())
         return;
     //清空原位置
     QPainter painter(&canvas);
-    QPixmap pixmap;
     int x, y;
     if(clean){
-        pixmap = QPixmap(m_gapUD, m_gapUD);
+        QPixmap pixmap = QPixmap(m_gapUD, m_gapUD);
         pixmap.fill(Qt::white);
 
         x = ((m_col+2)*m_gridSize + m_gapLR - m_gapUD)>>1;
@@ -189,18 +190,12 @@ void MainWindow::DrawSign(int signNo, QPixmap &canvas, bool clean)
         return;
 
     //有连接符号
-    QImage image;
-    image.load(m_inputDir+m_signList[signNo]);
-    if(image.isNull())      //图片不存在
-        return;
-
     int scale = ui->spinSignScale->value();
     int size = int(m_gapUD*scale/100);
-    pixmap = QPixmap::fromImage(image.scaled(size, size, Qt::KeepAspectRatio));
 
     x = ((m_col+2)*m_gridSize + m_gapLR - size)>>1;
     y = ((m_row+3)*m_gridSize - size)>>1;
-    painter.drawPixmap(x, y, pixmap);
+    painter.drawPixmap(x, y, m_signPixmap[signNo]);
     return;
 }
 
@@ -222,39 +217,25 @@ void MainWindow::DrawSign()
 
 void MainWindow::DrawImage(int row, int col, int imgNo, QPixmap &canvas)
 {
-    /*
-    QStringList imgList = {
-        "resources/input/duck_blue.png",
-        "resources/input/bf_blue.png",
-        "resources/input/bf_red.png"
-    };*/
-    ReadImageList();
-    if(imgNo < 0 || imgNo >= m_imgList.length())
+    if(imgNo < 0 || imgNo >= m_imgPixmap.length())
         return;
+
     if(row < 0 || row >= m_row || col < 0 || col >= m_col)
         return;
     //qDebug() <<"draw " << row <<" "<< col <<" "<< imgNo;
 
-    QImage image;
-    image.load(m_imgList[imgNo]);
-    if(image.isNull())      //图片不存在
-        return;
-
     int size = m_gridSize, imgSize = int(size*m_scale/100);
-    //QPixmap pixmap = QPixmap::fromImage(image.scaled(imgSize, imgSize, Qt::KeepAspectRatio));
-    QPixmap pixmap(m_imgList[imgNo]);
-    pixmap = pixmap.scaled(4*pixmap.size()).scaled(imgSize, imgSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
     QPainter painter(&canvas);
-    //painter质量
+    //平滑缩放
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
     int offset = (size - imgSize)/2;
     int gapUD = (row >= m_row/2) ? m_gapUD : 0;
     int gapLR = (col >= m_col/2) ? m_gapLR : 0;
     int x = gapLR+(col+1)*size+offset;
     int y = gapUD+(row+1)*size+offset;
-    //painter.drawPixmap(x, y, pixmap);
-    painter.drawPixmap(QRect(x, y, imgSize, imgSize), pixmap);
+    painter.drawPixmap(x, y, m_imgPixmap[imgNo]);
+    //painter.drawPixmap(QRect(x, y, imgSize, imgSize), pixmap);
 
     return;
 }
@@ -391,6 +372,63 @@ void MainWindow::FillImageList()
     return;
 }
 
+void MainWindow::LoadSignPixmap()
+{
+    int n = m_signList.length();
+    m_signPixmap.clear();
+    m_signPixmap.reserve(n);
+
+    int scale = ui->spinSignScale->value();
+    int size = int(m_gapUD*scale/100);
+
+    //0：空白
+    QPixmap pixmap(size, size);
+    m_signPixmap.push_back(pixmap);
+
+    //读入标志
+    for(int i=1; i<n; i++){
+        QImage image;
+        image.load(m_inputDir+m_signList[i]);
+        if(image.isNull())      //图片不存在
+            continue;
+
+        QPixmap pixmap = QPixmap::fromImage(image.scaled(size, size, Qt::KeepAspectRatio));
+        m_signPixmap.push_back(pixmap);
+    }
+    return;
+}
+
+void MainWindow::LoadImagePixmap()
+{
+    /*
+    QStringList imgList = {
+        "resources/input/duck_blue.png",
+        "resources/input/bf_blue.png",
+        "resources/input/bf_red.png"
+    };*/
+    ReadImageList();
+    int n = m_imgList.length();
+    m_imgPixmap.clear();
+    m_imgPixmap.reserve(n);
+
+    //计算大小
+    int size = m_gridSize, imgSize = int(size*m_scale/100);
+
+    for(int i=0; i<n; i++){
+        QImage image;
+        image.load(m_imgList[i]);
+        if(image.isNull())      //图片不存在
+            continue;
+
+        //载入图片，缩放
+        //QPixmap pixmap = QPixmap::fromImage(image.scaled(imgSize, imgSize, Qt::KeepAspectRatio));
+        QPixmap pixmap(m_imgList[i]);
+        pixmap = pixmap.scaled(4*pixmap.size()).scaled(imgSize, imgSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        m_imgPixmap.push_back(pixmap);
+    }
+    return;
+}
+
 void MainWindow::GenInputMat()
 {
     m_row = 6;
@@ -513,6 +551,9 @@ void MainWindow::ChangeGridSize(int val)
     m_gridSize = val;
     m_gapUD = m_gridSize;
 
+    LoadSignPixmap();
+    LoadImagePixmap();
+
     SetCanvas();
 
     m_pixmap.fill(Qt::white);   //清空画布
@@ -527,6 +568,8 @@ void MainWindow::ChangeImageScale(int val)
         return;
     m_scale = val;
 
+    LoadImagePixmap();
+
     m_pixmap.fill(Qt::white);   //清空画布
     DrawAllImage();     //重画图像
     DrawSign();         //重画连接符号
@@ -537,6 +580,7 @@ void MainWindow::ChangeSignScale(int val)
 {
     if(val <= 10)
         return;
+    LoadSignPixmap();
     DrawSign();
 }
 

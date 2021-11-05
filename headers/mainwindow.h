@@ -41,7 +41,7 @@ private:
     QString m_inputDir, m_outputDir;
 
     QVector<int> m_imgIndexList;
-//    QVector<QPixmap> m_imgPixmap;
+    QVector<QPixmap> m_imgPixmap, m_signPixmap;
 
     int m_row, m_col;
     int m_gridSize, m_gapUD, m_gapLR;
@@ -67,7 +67,9 @@ private:
 
     void ReadImageList();
     void FillImageList();
-//    void LoadImagePixmap();
+
+    void LoadSignPixmap();
+    void LoadImagePixmap();
 
     void SetOutputDir();
 
